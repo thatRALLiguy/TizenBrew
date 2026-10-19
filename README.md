@@ -86,3 +86,27 @@ Before a release, test on both an older and newer TV: enable/disable service
 autostart and restart, launch a document-start module, interrupt the network,
 restore it, and verify visible errors and recovery. Automated mocks and builds
 cannot verify Samsung APIs, certificates, or actual firmware behavior.
+
+## After installing a local build
+
+Keep Developer Mode enabled on the TV and change its Host PC IP to `127.0.0.1`.
+Save the setting, fully restart the TV, and open TizenBrew. The About page includes
+these steps and shows the loaded TizenTube module version.
+
+The default video client is `npm/@foxreis/tizentube`, maintained at
+https://github.com/reisxd/TizenTube. TizenBrew fetches its package metadata and
+scripts through `https://cdn.jsdelivr.net/npm/@foxreis/tizentube/`; the client
+opens YouTube's TV website. It is not embedded in the WGT. The default unversioned
+module follows the latest npm release, subject to CDN caching. A fully restarted
+TV clears the service's in-memory scripts and loads the client again; reinstalling
+TizenBrew is not necessary for module updates. Explicitly version-pinned modules
+continue to use their selected version.
+
+
+### Optional bundled TizenTube test package
+
+After building the service and UI, `python scripts/package-local.py --tizentube ../tizentube-source --output ../local.wgt` packages a prebuilt TizenTube checkout alongside TizenBrew. Build the module's `mods` and `service` directories first. The WGT is unsigned; sign it using the same author profile as the installed TizenBrew.
+
+This snapshot serves the standard `npm/@foxreis/tizentube` module from the package, including its metadata, userscript and casting service. Version-pinned URLs and other modules still use the CDN. A bundled snapshot stays at its packaged version until replaced with another WGT; installing a normal WGT without the snapshot restores online module loading. The package retains the existing TizenBrew application ID and does not install a Cobalt launcher.
+
+Run `node --test tests/*.test.cjs` for regression tests. After building the service, run `tests/legacy-streams.cjs` with Node 4.4.3 to exercise native legacy streams, including cancellation, timeout and HTTP rejection. CI verifies the downloaded legacy runtime checksum before running it.

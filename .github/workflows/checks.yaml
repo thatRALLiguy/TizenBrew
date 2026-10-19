@@ -21,6 +21,16 @@ jobs:
       - name: Build service
         working-directory: tizenbrew-app/TizenBrew/service-nextgen/service
         run: npm run build
+      - name: Test native Node 4.4.3 streams
+        run: |
+          mkdir -p "$RUNNER_TEMP/node4"
+          cd "$RUNNER_TEMP/node4"
+          curl -fsSLO https://nodejs.org/dist/v4.4.3/node-v4.4.3-linux-x64.tar.xz
+          curl -fsSLO https://nodejs.org/dist/v4.4.3/SHASUMS256.txt
+          sha256sum --check --ignore-missing SHASUMS256.txt
+          tar -xf node-v4.4.3-linux-x64.tar.xz
+          cd "$GITHUB_WORKSPACE"
+          "$RUNNER_TEMP/node4/node-v4.4.3-linux-x64/bin/node" tests/legacy-streams.cjs
       - name: Install UI dependencies
         working-directory: tizenbrew-app/TizenBrew/tizenbrew-ui
         run: npm ci

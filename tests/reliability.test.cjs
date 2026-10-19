@@ -203,3 +203,68 @@ test('repeated debug launches clean up an existing ADB stream', () => {
     h.timers.shift()();
     assert.deepEqual(h.removed,['connect','error','close']);
 });
+
+
+test('legacy PassThrough cleanup is idempotent without destroy', () => {
+    const closeStream = require(path.join(root, service, 'utils/closeStream.js'));
+    const stream = new (require('node:stream').PassThrough)();
+    stream.destroy = undefined; // Node 4 native Transform/PassThrough shape.
+    let closed = 0;
+    stream.on('close', () => { closed++; closeStream(stream); });
+    closeStream(stream);
+    closeStream(stream);
+    assert.equal(closed, 1);
+    assert.equal(stream.readableFlowing, true);
+});
+
+test('HTTP rejection keeps the status error with a legacy stream body', async () => {
+    const stream = new (require('node:stream').PassThrough)();
+    stream.destroy = undefined;
+    const download = load(service+'utils/download.js', {'node-fetch': () =>
+        Promise.resolve({ok:false, status:503, body:stream})});
+    await assert.rejects(download('https://example.com'), /HTTP 503/);
+});
+
+test('proxy cancellation and timeout clean legacy response streams', async () => {
+    for (const event of ['close', 'timeout']) {
+        let route, timeout;
+        const body = new (require('node:stream').PassThrough)();
+        body.destroy = undefined;
+        let closed = 0;
+        body.on('close', () => closed++);
+        const res = new (require('node:stream').PassThrough)();
+        res.setHeader = res.type = () => {};
+        res.setTimeout = (ms, cb) => { timeout = cb; };
+        const instance = load(service+'index.js', {
+            adbhost: {}, express: () => ({all(p, fn){route=fn;}, listen(){return {};}}),
+            './utils/download.js': url => Promise.resolve(url.indexOf('cdn.jsdelivr') >= 0 ? {body} : {json:()=>Promise.resolve({device:{}})}),
+            path: require('node:path'), './utils/configuration.js': {readConfig:()=>({autoLaunchServiceList:[]})},
+            './utils/moduleLoader.js':()=>Promise.resolve([]), './utils/debugger.js':()=>{},
+            './utils/serviceLauncher.js':()=>{}, './utils/wsCommunication.js':comm,
+            'ws-old': {Server: class {on(){}}}
+        }, {process:{version:'v4.4.3'}, tizen:{systeminfo:{getCapability:()=> '3.0'}}});
+        instance.onStart();
+        route({url:'/module/npm%2Fexample/main.js'}, res);
+        await flush();
+        assert.doesNotThrow(() => event === 'close' ? res.emit('close') : timeout());
+        assert.equal(closed, 1);
+    }
+});
+
+
+test('bundled TizenTube only handles the three exact unversioned assets', () => {
+    const seen=[];
+    const bundled=load(service+'utils/bundledModule.js', {
+        fs:{existsSync:p=>p.indexOf('missing')<0,createReadStream:p=>{seen.push(p);return p;}},
+        path:require('node:path')
+    }, {__dirname:'/package/service/dist'});
+    function Response(body){this.body=body;}
+    const prefix='https://cdn.jsdelivr.net/npm/@foxreis/tizentube/';
+    for(const asset of ['package.json','dist/userScript.js','dist/service.js']) {
+        assert.ok(bundled(prefix+asset,Response).body.includes('bundled-tizentube'));
+    }
+    for(const url of [prefix+'../secret',prefix+'package.json?x',prefix.replace('tizentube/','tizentube@1.15.2/')+'package.json','https://example.com/package.json']) {
+        assert.equal(bundled(url,Response),null);
+    }
+    assert.equal(seen.length,3);
+});

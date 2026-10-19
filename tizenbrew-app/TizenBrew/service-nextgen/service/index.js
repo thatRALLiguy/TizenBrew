@@ -5,6 +5,7 @@ module.exports.onStart = function () {
     const adbhost = require('adbhost');
     const express = require('express');
     const fetch = require('./utils/download.js');
+    const closeStream = require('./utils/closeStream.js');
     const path = require('path');
     const { readConfig, writeConfig } = require('./utils/configuration.js');
     const loadModules = require('./utils/moduleLoader.js');
@@ -34,8 +35,8 @@ module.exports.onStart = function () {
                     res.setHeader('Access-Control-Allow-Origin', '*');
                     res.type(path.basename(req.url.split('?')[0]));
                     fetchRes.body.on('error', () => res.destroy());
-                    res.on('close', () => fetchRes.body.destroy());
-                    res.setTimeout(15000, () => { fetchRes.body.destroy(); res.destroy(); });
+                    res.on('close', () => closeStream(fetchRes.body));
+                    res.setTimeout(15000, () => { closeStream(fetchRes.body); res.destroy(); });
                     fetchRes.body.pipe(res);
                 }).catch(error => {
                     if (!res.headersSent) res.status(502).send(error.message);
