@@ -1,0 +1,29 @@
+name: Reliability checks
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Regression tests
+        run: node --test tests/*.test.cjs
+      - name: Install service dependencies
+        working-directory: tizenbrew-app/TizenBrew/service-nextgen/service
+        run: npm ci
+      - name: Build service
+        working-directory: tizenbrew-app/TizenBrew/service-nextgen/service
+        run: npm run build
+      - name: Install UI dependencies
+        working-directory: tizenbrew-app/TizenBrew/tizenbrew-ui
+        run: npm ci
+      - name: Build legacy UI
+        working-directory: tizenbrew-app/TizenBrew/tizenbrew-ui
+        run: npm run build

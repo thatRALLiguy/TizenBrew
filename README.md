@@ -65,3 +65,24 @@ You can read the [guide](./docs/MODULES.md) to make a module for TizenBrew.
 # 💬 Translations
 
 You can read the [guide](./docs/TRANSLATION.md) to translate TizenBrew into your native language.
+## Development checks
+
+Run `node --test tests/*.test.cjs` from the repository root using Node 22 or newer.
+The tests mock Tizen, sockets, the debugger, downloads, and configuration storage;
+they do not require a TV or modify TV settings.
+
+Run `npm ci` and `npm run build` in each of these directories:
+
+- `tizenbrew-app/TizenBrew/service-nextgen/service`
+- `tizenbrew-app/TizenBrew/tizenbrew-ui`
+
+The UI deliberately aliases React to Preact. Its `.npmrc` permits those peer
+version differences; required build peers are explicit and locked. The service
+bundler is pinned. Build tools run on modern Node, while the service retains its
+Node 4.4.3 WebSocket selection and Babel transpilation, and the UI retains its
+Chrome 47 legacy target. Do not raise those runtime targets without TV testing.
+
+Before a release, test on both an older and newer TV: enable/disable service
+autostart and restart, launch a document-start module, interrupt the network,
+restore it, and verify visible errors and recovery. Automated mocks and builds
+cannot verify Samsung APIs, certificates, or actual firmware behavior.

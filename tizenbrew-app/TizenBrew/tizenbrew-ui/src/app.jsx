@@ -92,7 +92,7 @@ function startService(context) {
           payload: 'service.started'
         });
 
-        window.location.reload();
+        context.dispatch({ type: 'SET_CLIENT', payload: new Client(context) });
       },
       function (e) {
         alert("Launch Service failed: " + e.message);
@@ -101,6 +101,7 @@ function startService(context) {
   }
 
   testWS.onopen = () => {
+    testWS.close();
     context.dispatch({
       type: 'SET_STATE',
       payload: 'service.alreadyRunning'

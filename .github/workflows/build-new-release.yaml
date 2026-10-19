@@ -15,37 +15,34 @@ jobs:
       - name: Clone repo
         uses: actions/checkout@v4
       
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
       - name: Set env
         run: echo "RELEASE_VERSION=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
       
-      - name: Install modules and transpile service
+      - name: Regression tests
+        run: node --test tests/*.test.cjs
+
+      - name: Build service
         working-directory: tizenbrew-app/TizenBrew/service-nextgen/service
         run: |
           sudo apt install -y expect zip coreutils
-          sudo curl -Lo /usr/bin/ldid https://github.com/ProcursusTeam/ldid/releases/download/v2.1.5-procursus7/ldid_linux_x86_64
-          sudo chmod a+rwx /usr/bin/ldid
-          npm install
-          npm install -g @vercel/ncc wgt-to-usb pkg
-          npx babel . --out-dir transpiled --copy-files
-          rm -r node_modules
-
-      - name: Build service
-        working-directory: tizenbrew-app/TizenBrew/service-nextgen/service/transpiled
-        run: |
-          ncc build index.js -o ../dist
-          rm -r node_modules
+          npm ci
+          npm run build
 
       - name: Build UI
         working-directory: tizenbrew-app/TizenBrew/tizenbrew-ui
         run: |
-          npm install --force
+          npm ci
           npm run build
           rm -r node_modules
 
       - name: Clean up transpiled files
         working-directory: tizenbrew-app/TizenBrew/service-nextgen/service
         run: |
-          rm -r transpiled
+          rm -r transpiled node_modules
 
       - name: Download Tizen-Studio
         run: |

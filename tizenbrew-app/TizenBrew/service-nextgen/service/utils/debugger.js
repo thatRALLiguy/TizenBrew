@@ -1,10 +1,10 @@
 "use strict";
 
 const CDP = require('chrome-remote-interface');
-const fetch = require('node-fetch');
+const fetch = require('./download.js');
 const { Events } = require('./wsCommunication.js');
 const { readConfig } = require('./configuration.js');
-const WebSocket = require('ws');
+const event = (type, payload) => ({ type, payload });
 
 const modulesCache = new Map();
 
@@ -31,18 +31,17 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                     }
                 } else if (mdl.name !== '' && mdl.evaluateScriptOnDocumentStart) {
                     const cache = modulesCache.get(mdl.fullName);
-                    const clientConnection = clientConn.get('wsConn');
                     if (cache) {
-                        client.Page.addScriptToEvaluateOnNewDocument({ expression: cache });
-                        sendClientInformation(clientConn, clientConnection.Event(Events.LaunchModule, mdl.name));
+                        Promise.resolve(client.Page.addScriptToEvaluateOnNewDocument({ expression: cache }))
+                            .then(() => sendClientInformation(clientConn, event(Events.LaunchModule, mdl.fullName)))
+                            .catch(error => sendClientInformation(clientConn, event(Events.Error, error.message)));
                     } else {
                         fetch(`https://cdn.jsdelivr.net/${mdl.fullName}/${mdl.mainFile}`).then(res => res.text()).then(modFile => {
                             modulesCache.set(mdl.fullName, modFile);
-                            sendClientInformation(clientConn, clientConnection.Event(Events.LaunchModule, mdl.name));
-                            client.Page.addScriptToEvaluateOnNewDocument({ expression: modFile });
+                            return Promise.resolve(client.Page.addScriptToEvaluateOnNewDocument({ expression: modFile }))
+                                .then(() => sendClientInformation(clientConn, event(Events.LaunchModule, mdl.fullName)));
                         }).catch(e => {
-                            sendClientInformation(clientConn, clientConnection.Event(Events.LaunchModule, mdl.name));
-                            client.Page.addScriptToEvaluateOnNewDocument({ expression: `alert("Failed to load module: '${mdl.fullName}'. Please relaunch TizenBrew to try again.")` });
+                            sendClientInformation(clientConn, event(Events.Error, 'Failed to load module: ' + mdl.fullName + '. Please try again.'));
                         });
                     }
                 }
@@ -65,9 +64,8 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
             });
 
             if (!isAnotherApp) {
-                const clientConnection = clientConn.get('wsConn');
-                if (appControlData.module) {
-                    const data = clientConnection.Event(Events.CanLaunchModules, {
+                if (appControlData && appControlData.module) {
+                    const data = event(Events.CanLaunchModules, {
                         type: 'appControl',
                         module: appControlData.module,
                         args: appControlData.args
@@ -76,7 +74,7 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                 } else {
                     const config = readConfig();
                     if (config.autoLaunchModule) {
-                        const data = clientConnection.Event(Events.CanLaunchModules, {
+                        const data = event(Events.CanLaunchModules, {
                             type: 'autolaunch',
                             module: config.autoLaunchModule
                         });
@@ -84,7 +82,7 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
                         sendClientInformation(clientConn, data);
 
                     } else {
-                        const data = clientConnection.Event(Events.CanLaunchModules, null);
+                        const data = event(Events.CanLaunchModules, null);
                         sendClientInformation(clientConn, data);
                     }
                 }
@@ -94,7 +92,7 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
         }).on('error', (err) => {
             if (attempts >= 15) {
                 if (!isAnotherApp) {
-                    clientConn.send(clientConn.Event(Events.Error, 'Failed to connect to the debugger'));
+                    sendClientInformation(clientConn, event(Events.Error, 'Failed to connect to the debugger. Relaunch TizenBrew to retry.'));
                     inDebug.tizenDebug = false;
                     return;
                 } else return;
@@ -105,7 +103,7 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
     } catch (e) {
         if (attempts >= 15) {
             if (!isAnotherApp) {
-                clientConn.send(clientConn.Event(Events.Error, 'Failed to connect to the debugger'));
+                sendClientInformation(clientConn, event(Events.Error, 'Failed to connect to the debugger. Relaunch TizenBrew to retry.'));
                 inDebug.tizenDebug = false;
                 return;
             } else return;
@@ -116,14 +114,15 @@ function startDebugging(port, queuedEvents, clientConn, ip, mdl, inDebug, appCon
     }
 }
 
-function sendClientInformation(clientConn, data) {
+function sendClientInformation(clientConn, data, attempts) {
+    attempts = attempts || 0;
     const clientConnection = clientConn.get('wsConn');
-    if ((clientConnection && clientConnection.connection && (clientConnection.connection.readyState !== WebSocket.OPEN && !clientConnection.isReady)) || !clientConnection) {
-        return setTimeout(() => sendClientInformation(clientConn, data), 50);
+    if (!clientConnection || clientConnection.connection.readyState !== 1 || (!clientConnection.isReady && data.type !== Events.Error)) {
+        // Allow the bounded module downloads and UI reconnection to finish.
+        if (attempts < 600) setTimeout(() => sendClientInformation(clientConn, data, attempts + 1), 100);
+        return;
     }
-    setTimeout(() => {
-        clientConnection.send(data);
-    }, 500);
+    clientConnection.send(data);
 }
 
 module.exports = startDebugging;

@@ -16,6 +16,7 @@
     "postcss-preset-env": "^10.1.2",
     "preact": "^10.25.3",
     "preact-iso": "^2.8.1",
+    "preact-render-to-string": "6.5.12",
     "react": "npm:@preact/compat",
     "react-dom": "npm:@preact/compat",
     "react-i18next": "^15.4.0"
@@ -25,6 +26,7 @@
     "autoprefixer": "^10.4.20",
     "postcss": "^8.5.1",
     "tailwindcss": "^3.4.17",
+    "terser": "5.37.0",
     "vite": "^6.0.5",
     "vite-plugin-external": "^4.3.1"
   }
