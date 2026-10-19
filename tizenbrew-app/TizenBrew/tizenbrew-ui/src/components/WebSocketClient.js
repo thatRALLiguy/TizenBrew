@@ -16,13 +16,44 @@ const Events = {
 class Client {
     constructor(context) {
         this.context = context;
-        this.socket = new WebSocket('ws://localhost:8081');
-        this.socket.onopen = this.onOpen.bind(this);
-        this.socket.onmessage = this.onMessage.bind(this);
-        this.socket.onerror = () => location.reload();
+        this.retries = 0;
         this.pendingEvents = [];
         this.modulesLoaded = false;
         this.modules = [];
+        this.connect();
+    }
+
+    reportError(message) {
+        this.context.dispatch({ type: 'SET_ERROR', payload: { message, disappear: false } });
+    }
+
+    connect() {
+        const socket = new WebSocket('ws://localhost:8081');
+        this.socket = socket;
+        let failed = false;
+        const timeout = setTimeout(() => retry(), 10000);
+        const retry = () => {
+            if (failed) return;
+            failed = true;
+            clearTimeout(timeout);
+            socket.onopen = socket.onmessage = socket.onerror = socket.onclose = null;
+            socket.close();
+            this.modulesLoaded = false;
+            this.pendingEvents = [];
+            if (this.retries >= 5) {
+                this.reportError('Cannot connect to TizenBrew service. Relaunch TizenBrew to retry.');
+                return;
+            }
+            this.reportError('Connection lost. Reconnecting to TizenBrew service…');
+            setTimeout(() => this.connect(), Math.min(500 * Math.pow(2, this.retries++), 5000));
+        };
+        socket.onopen = () => {
+            clearTimeout(timeout);
+            this.context.dispatch({ type: 'SET_ERROR', payload: { message: null, disappear: false } });
+            this.onOpen();
+        };
+        socket.onmessage = this.onMessage.bind(this);
+        socket.onerror = socket.onclose = retry;
     }
 
     onOpen() {
@@ -61,10 +92,17 @@ class Client {
     }
 
     onMessage(event) {
-        const data = JSON.parse(event.data);
+        let data;
+        try { data = JSON.parse(event.data); }
+        catch (error) { this.reportError('Invalid response from TizenBrew service.'); return; }
+        if (!data || typeof data !== 'object') return;
         const { type, payload } = data;
 
         switch (type) {
+            case Events.Error: {
+                this.reportError(typeof payload === 'string' ? payload : 'TizenBrew service error.');
+                break;
+            }
             case Events.AppControlData: {
                 this.send({
                     type: Events.GetDebugStatus
@@ -132,6 +170,7 @@ class Client {
                     payload
                 });
 
+                this.retries = 0;
                 this.modules = payload;
                 this.modulesLoaded = true;
 
@@ -203,10 +242,10 @@ class Client {
                     tizen.tvinputdevice.registerKey(key);
                 }
 
-                this.send({
+                if (!this.send({
                     type: Events.LaunchModule,
                     payload: module
-                });
+                })) return;
 
                 if (!module.evaluateScriptOnDocumentStart) {
                     location.href = module.appPath;
@@ -218,10 +257,10 @@ class Client {
                     tizen.tvinputdevice.registerKey(key);
                 }
 
-                this.send({
+                if (!this.send({
                     type: Events.LaunchModule,
                     payload: module
-                });
+                })) return;
 
                 module.appPath.includes('?') ? location.href = `${module.appPath}&${payload.args}` : location.href = `${module.appPath}?${payload.args}`;
             }
@@ -238,7 +277,16 @@ class Client {
     }
 
     send(data) {
+        if (data.type === Events.LaunchModule && (!data.payload || !data.payload.appPath)) {
+            this.reportError('This module could not be loaded. Refresh the module list and try again.');
+            return false;
+        }
+        if (this.socket.readyState !== WebSocket.OPEN) {
+            this.reportError('Service disconnected. Wait for reconnection and try again.');
+            return false;
+        }
         this.socket.send(JSON.stringify(data));
+        return true;
     }
 }
 

@@ -42,5 +42,14 @@
     },
     "__contributors": [
         "reisxd"
-    ]
+    ],
+    "about": {
+        "setupTitle": "After installation",
+        "setupInstructions": "On your TV, keep Developer Mode enabled and set Host PC IP to 127.0.0.1. Save, fully restart the TV, then open TizenBrew.",
+        "clientTitle": "TizenTube video client",
+        "clientVersion": "Loaded module version: {{version}}",
+        "clientNotLoaded": "TizenTube is not loaded. Check your connection and Module Manager.",
+        "clientSource": "TizenTube loads from @foxreis/tizentube on npm through jsDelivr. The standard module follows the latest published version; it is downloaded separately from this app.",
+        "clientRefresh": "To refresh TizenTube and clear cached scripts, fully restart the TV and reopen TizenBrew while connected to the internet. You do not need to reinstall the WGT for a TizenTube update."
+    }
 }

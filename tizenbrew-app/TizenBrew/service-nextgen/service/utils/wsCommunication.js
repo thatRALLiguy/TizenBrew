@@ -5,7 +5,7 @@ class Connection {
     }
 
     send(data) {
-        this.connection.send(JSON.stringify(data));
+        if (this.connection.readyState === 1) this.connection.send(JSON.stringify(data));
     }
 
     Event(event, payload) {

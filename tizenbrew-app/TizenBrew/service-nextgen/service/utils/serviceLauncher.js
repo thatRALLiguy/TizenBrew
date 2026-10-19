@@ -1,7 +1,7 @@
 "use strict";
 
 const vm = require('vm');
-const fetch = require('node-fetch');
+const fetch = require('./download.js');
 
 function startService(mdl, services) {
     let sandbox = {};

@@ -1,5 +1,5 @@
 const { readConfig } = require('./configuration.js');
-const fetch = require('node-fetch');
+const fetch = require('./download.js');
 
 function loadModules() {
     const config = readConfig();
@@ -9,7 +9,13 @@ function loadModules() {
         return fetch(`https://cdn.jsdelivr.net/${module}/package.json`)
             .then(res => res.json())
             .then(moduleJson => {
-                console
+                if (!moduleJson || typeof moduleJson.appName !== 'string' ||
+                    (moduleJson.keys && (!Array.isArray(moduleJson.keys) || moduleJson.keys.some(key => typeof key !== 'string'))) ||
+                    (moduleJson.serviceFile && typeof moduleJson.serviceFile !== 'string') ||
+                    (moduleJson.packageType === 'app' && (typeof moduleJson.appPath !== 'string' || !moduleJson.appPath)) ||
+                    (moduleJson.packageType === 'mods' && (typeof moduleJson.websiteURL !== 'string' || !/^https?:\/\//.test(moduleJson.websiteURL) || typeof moduleJson.main !== 'string' || !moduleJson.main))) {
+                    throw new Error('Invalid module metadata');
+                }
                 let moduleData;
                 const splitData = [
                     module.substring(0, module.indexOf('/')),

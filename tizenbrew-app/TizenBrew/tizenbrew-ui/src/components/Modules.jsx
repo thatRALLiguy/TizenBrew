@@ -24,10 +24,10 @@ function Item({ children, module, id, state }) {
       tizen.tvinputdevice.registerKey(key);
     }
 
-    state.client.send({
+    if (!state.client.send({
       type: Events.LaunchModule,
       payload: module
-    });
+    })) return;
 
     if (!module.evaluateScriptOnDocumentStart) {
       location.href = module.appPath;
