@@ -85,12 +85,12 @@ test('document-start launch uses full identifier and waits for a ready socket', 
     assert.equal(sent[0].payload,'npm/example');
 });
 
-function serviceHarness(config, version = 'v24.0.0') {
+function serviceHarness(config, version = 'v24.0.0', fetchOverride) {
     let accept, receive, selectedSocket; const sent=[], started=[], timers=[], removed=[];
     const socketServer = name => ({Server:class {constructor(){selectedSocket=name;} on(event,fn){accept=fn;}}});
     const instance=load(service+'index.js', {
         adbhost:{createConnection:()=>({_stream:{on(){},removeAllListeners:event=>removed.push(event)}})}, express:()=>({all(){},listen(){return {};}}),
-        './utils/download.js':()=>Promise.resolve({json:()=>Promise.resolve({device:{developerIP:'127.0.0.1',developerMode:'1'}})}),
+        './utils/download.js':fetchOverride || (()=>Promise.resolve({json:()=>Promise.resolve({device:{developerIP:'127.0.0.1',developerMode:'1'}})})),
         path:require('node:path'), './utils/configuration.js':{readConfig:()=>config,writeConfig:()=>{}},
         './utils/moduleLoader.js':()=>Promise.resolve([{name:'example',fullName:'npm/example',serviceFile:'service.js'}]),
         './utils/debugger.js':()=>{}, './utils/serviceLauncher.js':mdl=>started.push(mdl), './utils/wsCommunication.js':comm,
@@ -267,4 +267,26 @@ test('bundled TizenTube only handles the three exact unversioned assets', () => 
         assert.equal(bundled(url,Response),null);
     }
     assert.equal(seen.length,3);
+});
+
+
+test('developer status recovers after a transient TV API failure without reconnecting', async () => {
+    let requests=0;
+    const h=serviceHarness({modules:[],autoLaunchServiceList:[]},'v4.4.3',()=> {
+        requests++;
+        return requests===2 ? Promise.reject(Error('TV API starting')) : Promise.resolve({json:()=>Promise.resolve({device:{developerIP:'127.0.0.1',developerMode:'1'}})});
+    });
+    h.send({type:2});await flush();
+    assert.equal(h.sent.length,0);assert.equal(h.timers.length,1);
+    h.timers.shift()();await flush();
+    assert.equal(h.sent[0].type,2);assert.equal(h.sent[0].payload,true);
+    assert.equal(h.timers.length,0);
+});
+
+test('developer status retries are bounded and report a recovery action', async () => {
+    const h=serviceHarness({modules:[],autoLaunchServiceList:[]},'v4.4.3',()=>Promise.reject(Error('offline')));
+    h.send({type:2});await flush();
+    for(let i=0;i<3;i++){assert.equal(h.timers.length,1);h.timers.shift()();await flush();}
+    assert.equal(h.timers.length,0);assert.equal(h.sent.length,1);
+    assert.equal(h.sent[0].type,8);assert.match(h.sent[0].payload,/Relaunch/);
 });

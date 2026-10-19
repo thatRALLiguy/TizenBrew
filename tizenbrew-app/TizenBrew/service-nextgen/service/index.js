@@ -161,11 +161,18 @@ module.exports.onStart = function () {
                         break;
                     }
                     case Events.CanLaunchInDebug: {
-                        fetch('http://127.0.0.1:8001/api/v2/').then(res => res.json())
-                            .then(json => {
-                                canLaunchInDebug = (json.device.developerIP === '127.0.0.1' || json.device.developerIP === '1.0.0.127') && json.device.developerMode === '1';
-                                wsConn.send(wsConn.Event(Events.CanLaunchInDebug, canLaunchInDebug));
-                            }).catch(error => wsConn.send(wsConn.Event(Events.Error, error.message)));
+                        const queryDeveloperMode = (attempt) => {
+                            fetch('http://127.0.0.1:8001/api/v2/').then(res => res.json())
+                                .then(json => {
+                                    canLaunchInDebug = (json.device.developerIP === '127.0.0.1' || json.device.developerIP === '1.0.0.127') && json.device.developerMode === '1';
+                                    wsConn.send(wsConn.Event(Events.CanLaunchInDebug, canLaunchInDebug));
+                                }).catch(error => {
+                                    if (attempt < 3) {
+                                        setTimeout(() => queryDeveloperMode(attempt + 1), 1000 * (attempt + 1));
+                                    } else wsConn.send(wsConn.Event(Events.Error, 'TV status unavailable after retries. Relaunch TizenBrew to retry. ' + error.message));
+                                });
+                        };
+                        queryDeveloperMode(0);
                         break;
                     }
                     case Events.ReLaunchInDebug: {
